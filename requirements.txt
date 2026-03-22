@@ -1,0 +1,9 @@
+#
+# WhisperX is not yet compatible with Python 3.14 at time of writing.
+# Use Python 3.11 or 3.12 for this project.
+#
+whisperx; python_version < "3.14"
+torch; python_version < "3.14"
+torchaudio; python_version < "3.14"
+soundfile; python_version < "3.14"
+

@@ -1,0 +1,56 @@
+# Example commands — do NOT put real tokens in this file (GitHub will block the push).
+#
+# PowerShell (once per session):
+#   $env:HF_TOKEN = "hf_xxxxxxxx"   # paste your token only locally, never commit it
+#
+# Then copy lines below without --hf-token if you use HF_TOKEN env, or use:
+#   --hf-token $env:HF_TOKEN
+
+python -m app.main --input "Inputs\a3en-2speakers-short.mp3" --output "Outputs\a3en-2speakers-short-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3en-2speakers-short.mp3" --output "Outputs\a3en-2speakers-short-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3he-2speakers-short.mp3" --output "Outputs\a3he-2speakers-short-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3he-2speakers-short.mp3" --output "Outputs\a3he-2speakers-short-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3en-2speakers-long.mp3" --output "Outputs\a3en-2speakers-long-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3en-2speakers-long.mp3" --output "Outputs\a3en-2speakers-long-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3he-2speakers-long.mp3" --output "Outputs\a3he-2speakers-long-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3he-2speakers-long.mp3" --output "Outputs\a3he-2speakers-long-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3en-5speakers-short.mp3" --output "Outputs\a3en-5speakers-short-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3en-5speakers-short.mp3" --output "Outputs\a3en-5speakers-short-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3he-3speakers-short.mp3" --output "Outputs\a3he-3speakers-short-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3he-3speakers-short.mp3" --output "Outputs\a3he-3speakers-short-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3en-3speakers-long.mp3" --output "Outputs\a3en-3speakers-long-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3en-3speakers-long.mp3" --output "Outputs\a3en-3speakers-long-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3he-3speakers-long.mp3" --output "Outputs\a3he-3speakers-long-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3he-3speakers-long.mp3" --output "Outputs\a3he-3speakers-long-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3en-2speakers-short-overlap.mp3" --output "Outputs\a3en-2speakers-short-overlap-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3en-2speakers-short-overlap.mp3" --output "Outputs\a3en-2speakers-short-overlap-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+
+python -m app.main --input "Inputs\a3he-2speakers-short-overlap.mp3" --output "Outputs\a3he-2speakers-short-overlap-small-diar.json" --model small --enable-diarization --hf-token $env:HF_TOKEN --export-html
+
+python -m app.main --input "Inputs\a3he-2speakers-short-overlap.mp3" --output "Outputs\a3he-2speakers-short-overlap-largev3-diar.json" --model large-v3 --enable-diarization --hf-token $env:HF_TOKEN --export-html
