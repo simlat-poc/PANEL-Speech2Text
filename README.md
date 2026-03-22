@@ -5,13 +5,15 @@ This project is an **offline / post-processing** transcription pipeline:
 - Accepts audio/video files (`wav`, `mp3`, `m4a`, `mp4`, `mov`, `mkv`, etc.)
 - Normalizes input to **mono 16 kHz PCM WAV** using **ffmpeg**
 - Runs **WhisperX** transcription + **alignment** for **word-level timestamps**
-- Writes a stable JSON output (easy to extend later with diarization fields)
+- Optional **speaker diarization** via **PyAnnote** (WhisperX `DiarizationPipeline`), assigning speakers to segments and words in the JSON
+- Writes a stable JSON output
 
 ## Requirements
 
 - **Python 3.11 or 3.12** (recommended: 3.12)
   - Python **3.14 is not supported** by WhisperX dependencies yet (you’ll see install errors like `ctranslate2` incompatibilities).
 - **ffmpeg** installed and available on `PATH`
+- **Diarization:** a [Hugging Face](https://huggingface.co) account and **access token**, and you must **accept the model license** for the diarization model you use (see below)
 
 Check ffmpeg:
 
@@ -54,6 +56,27 @@ See all flags:
 
 ```powershell
 python -m app.main --help
+```
+
+## Speaker diarization (PyAnnote)
+
+When you pass **`--enable-diarization`**, the pipeline runs WhisperX’s **`DiarizationPipeline`** (PyAnnote) on the normalized audio and merges speaker labels into each segment and word in the JSON.
+
+- **Model (this repo):** [`pyannote/speaker-diarization-community-1`](https://huggingface.co/pyannote/speaker-diarization-community-1) (see `app/diarization.py`). On Hugging Face, open the model page and **accept the terms** so your token can download it.
+- **Token:** use **`--hf-token`** or set one of **`HF_TOKEN`**, **`HUGGINGFACE_TOKEN`**, or **`HUGGINGFACEHUB_API_TOKEN`** in the environment. **Do not commit tokens** to git.
+- **Speaker count hints (optional):** `--min-speakers`, `--max-speakers`, and **`--num-speakers`** are passed through to PyAnnote; they are **hints**, not a strict guarantee of how many speaker labels appear in the output.
+
+Example:
+
+```powershell
+python -m app.main --input "file.mp4" --output "out.json" --enable-diarization --hf-token "hf_..." --export-html
+```
+
+Or with env var (PowerShell):
+
+```powershell
+$env:HF_TOKEN = "hf_..."
+python -m app.main --input "file.mp4" --output "out.json" --enable-diarization
 ```
 
 ## Export HTML Timeline (demo artifact)
