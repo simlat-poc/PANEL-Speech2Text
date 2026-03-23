@@ -34,3 +34,10 @@ Inputs/Execution.local.txt
 
 # PyInstaller / local builds
 *.spec.bak
+offline_assets/
+offline_wheels/
+delivery_bundle/
+dist/
+build/
+Outputs/
+Inputs/*.mp3

@@ -154,9 +154,11 @@ def _validate_inputs(cfg: RuntimeConfig) -> None:
 
 
 def run_pipeline(cfg: RuntimeConfig) -> int:
+    pipeline_start = time.perf_counter()
     _validate_inputs(cfg)
 
     pipeline_timings: dict[str, float] = {}
+    final_result = None
 
     t0 = time.perf_counter()
     ffmpeg_path = validate_ffmpeg_exists()
@@ -204,9 +206,11 @@ def run_pipeline(cfg: RuntimeConfig) -> int:
                 language=cfg.language,
                 batch_size=cfg.batch_size,
             )
-        pipeline_timings["transcribe_and_align_seconds"] = time.perf_counter() - t0
+        _ = time.perf_counter() - t0  # covered by leaf timings from transcription module
 
+        t0 = time.perf_counter()
         duration = wav_duration_seconds(normalized_path)
+        pipeline_timings["measure_duration_seconds"] = time.perf_counter() - t0
         # Merge pipeline-level timings into the result extras.
         merged_extras = dict(result.extras or {})
         runtime_stats = dict(merged_extras.get("runtime_stats") or {})
@@ -222,6 +226,7 @@ def run_pipeline(cfg: RuntimeConfig) -> int:
                     "Diarization enabled but no Hugging Face token provided. "
                     "Use --hf-token or set HF_TOKEN/HUGGINGFACE_TOKEN env var."
                 )
+            t0 = time.perf_counter()
             turns = run_whisperx_diarization(
                 audio_path=normalized_path,
                 device=resolved,
@@ -230,7 +235,10 @@ def run_pipeline(cfg: RuntimeConfig) -> int:
                 max_speakers=cfg.max_speakers,
                 num_speakers=cfg.num_speakers,
             )
+            pipeline_timings["run_diarization_seconds"] = time.perf_counter() - t0
+            t0 = time.perf_counter()
             diarized_segments = assign_speakers(segments=result.segments, turns=turns, assign_words=True)
+            pipeline_timings["assign_speakers_seconds"] = time.perf_counter() - t0
             merged_extras["diarization_enabled"] = True
             merged_extras["diarization_method"] = "whisperx"
             merged_extras["speakers"] = [t.to_dict() for t in turns]
@@ -293,14 +301,37 @@ def run_pipeline(cfg: RuntimeConfig) -> int:
                 px_per_sec=cfg.html_px_per_sec,
                 direction=cfg.html_direction,
             )
+            pipeline_timings["export_html_seconds"] = time.perf_counter() - t_html
             logger.info(
                 "Wrote HTML timeline to %s (%.3fs)",
                 html_path,
-                time.perf_counter() - t_html,
+                pipeline_timings["export_html_seconds"],
             )
+
+        final_result = result
 
         if cfg.keep_temp_files:
             logger.info("Temp files kept in %s", work_dir)
+
+    if final_result is None:
+        raise RuntimeError("Pipeline produced no result.")
+
+    pipeline_timings["total_pipeline_seconds"] = time.perf_counter() - pipeline_start
+    merged_extras = dict(final_result.extras or {})
+    runtime_stats = dict(merged_extras.get("runtime_stats") or {})
+    runtime_stats.update(pipeline_timings)
+    merged_extras["runtime_stats"] = runtime_stats
+    final_result = type(final_result)(
+        source_file=final_result.source_file,
+        normalized_audio_file=final_result.normalized_audio_file,
+        model=final_result.model,
+        language=final_result.language,
+        duration_seconds=final_result.duration_seconds,
+        full_text=final_result.full_text,
+        segments=final_result.segments,
+        extras=merged_extras,
+    )
+    write_json(final_result, cfg.output_path)
 
     return 0
 
