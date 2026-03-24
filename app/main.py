@@ -8,7 +8,7 @@ Quickstart:
        .\\.venv\\Scripts\\activate
        pip install -r requirements.txt
   3) Run:
-       python -m app.main --input "path\\to\\file.mp4" --output "out.json" --model large-v3 --device auto
+      python -m app.main --input "path\\to\\file.mp4" --output "out.json" --model-preset original --device auto
 """
 
 from __future__ import annotations
@@ -35,6 +35,11 @@ from .utils import configure_logging, resolve_device, wav_duration_seconds
 
 logger = logging.getLogger(__name__)
 
+MODEL_PRESETS: dict[str, str] = {
+    "original": "large-v3",
+    "ivrit-he": "ivrit-ai/whisper-large-v3-ct2",
+}
+
 
 def _ensure_supported_python() -> None:
     # WhisperX (and core deps like ctranslate2) commonly lag newest Python versions.
@@ -52,7 +57,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Offline transcription using WhisperX + alignment.")
     p.add_argument("--input", required=True, type=Path, help="Path to input audio/video file.")
     p.add_argument("--output", required=True, type=Path, help="Path to output JSON.")
-    p.add_argument("--model", default="large-v3", help="Whisper model size/name (e.g. tiny, base, small, medium, large-v2, large-v3).")
+    p.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "Custom Whisper model id/name (e.g. tiny, base, small, medium, large-v3, "
+            "ivrit-ai/whisper-large-v3-ct2). Overrides --model-preset when provided."
+        ),
+    )
+    p.add_argument(
+        "--model-preset",
+        default="original",
+        choices=sorted(MODEL_PRESETS.keys()),
+        help=(
+            "Convenience model preset. "
+            "'original' -> large-v3, "
+            "'ivrit-he' -> ivrit-ai/whisper-large-v3-ct2."
+        ),
+    )
     p.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"], help="Device selection.")
     p.add_argument("--compute-type", default=None, help="Compute type (e.g. float16, int8). Default depends on device.")
     p.add_argument("--language", default=None, help="Language code (e.g. en). If omitted, auto-detect.")
@@ -353,10 +375,18 @@ def main(argv: list[str] | None = None) -> int:
                 resolved_for_default = "cpu"
         compute_type = _default_compute_type("cuda" if resolved_for_default == "cuda" else "cpu")
 
+    model_name = args.model or MODEL_PRESETS.get(args.model_preset, MODEL_PRESETS["original"])
+    logger.info(
+        "Selected model: %s (preset=%s, custom_override=%s)",
+        model_name,
+        args.model_preset,
+        bool(args.model),
+    )
+
     cfg = RuntimeConfig(
         input_path=args.input.resolve(),
         output_path=args.output.resolve(),
-        model_name=args.model,
+        model_name=model_name,
         device=args.device,
         compute_type=compute_type,
         language=args.language,

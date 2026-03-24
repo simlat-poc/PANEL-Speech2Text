@@ -36,7 +36,19 @@ pip install -r requirements.txt
 ## Run
 
 ```powershell
-python -m app.main --input "C:\path\to\file.mp4" --output "C:\path\to\out.json" --device auto --model large-v3
+python -m app.main --input "C:\path\to\file.mp4" --output "C:\path\to\out.json" --device auto --model-preset original
+```
+
+Compare Hebrew model preset:
+
+```powershell
+python -m app.main --input "C:\path\to\file.mp4" --output "C:\path\to\out_ivrit.json" --device auto --model-preset ivrit-he
+```
+
+Use any custom model id directly (overrides preset):
+
+```powershell
+python -m app.main --input "C:\path\to\file.mp4" --output "C:\path\to\out_custom.json" --model "ivrit-ai/whisper-large-v3-ct2"
 ```
 
 Write **JSON and the interactive HTML timeline** in one command:

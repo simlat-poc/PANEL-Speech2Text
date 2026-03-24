@@ -18,11 +18,24 @@ class FfmpegError(RuntimeError):
 
 def validate_ffmpeg_exists() -> Path:
     ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise FfmpegNotFoundError(
-            "ffmpeg not found on PATH. Install ffmpeg and ensure `ffmpeg` is available."
-        )
-    return Path(ffmpeg)
+    if ffmpeg:
+        return Path(ffmpeg)
+
+    # Fallback for portable/offline bundles where ffmpeg is shipped in-repo.
+    project_root = Path(__file__).resolve().parent.parent
+    bundled_candidates = [
+        project_root / "ffmpeg-8.1-essentials_build" / "bin" / "ffmpeg.exe",
+        project_root / "ffmpeg-8.1-essentials_build" / "bin" / "ffmpeg",
+    ]
+    for candidate in bundled_candidates:
+        if candidate.exists():
+            logger.info("Using bundled ffmpeg at %s", candidate)
+            return candidate
+
+    raise FfmpegNotFoundError(
+        "ffmpeg not found on PATH and no bundled ffmpeg binary was found. "
+        "Install ffmpeg or place it under ffmpeg-8.1-essentials_build/bin."
+    )
 
 
 def normalize_to_wav_mono_16k(

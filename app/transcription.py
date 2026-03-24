@@ -16,6 +16,32 @@ class TranscriptionError(RuntimeError):
     pass
 
 
+def _resolve_model_download_root() -> Path:
+    # Windows can fail creating symlinks in the default HF cache (WinError 1314).
+    # Use a local project folder for model snapshots to avoid symlink privileges.
+    root = Path.cwd() / ".model_cache"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _format_model_load_error(model_name: str, error: Exception) -> str:
+    msg = str(error)
+    if "model.bin" in msg and "Unable to open file" in msg:
+        return (
+            "Selected model is not in Faster-Whisper/CTranslate2 format (missing model.bin). "
+            f"Model '{model_name}' appears to be a Transformers checkpoint only. "
+            "Use a CTranslate2-compatible model, or convert the model first."
+        )
+    if "WinError 1314" in msg:
+        return (
+            "Windows blocked symlink creation while downloading from Hugging Face cache "
+            "(WinError 1314). Run the terminal as Administrator or enable Windows "
+            "Developer Mode. The app now uses a local model cache to reduce this issue; "
+            "if it persists, clear the failing Hugging Face snapshot and retry."
+        )
+    return msg
+
+
 def _resolve_device(device: str) -> str:
     if device != "auto":
         return device
@@ -25,6 +51,17 @@ def _resolve_device(device: str) -> str:
         return "cuda" if torch.cuda.is_available() else "cpu"
     except Exception:
         return "cpu"
+
+
+def _align_model_candidates(language_code: str) -> list[str]:
+    if language_code == "he":
+        # WhisperX default Hebrew align model id is stale in some releases.
+        # Try known alternatives before failing.
+        return [
+            "imvladikon/wav2vec2-xls-r-300m-hebrew",
+            "facebook/wav2vec2-large-xlsr-53",
+        ]
+    return []
 
 
 def _segment_from_dict(seg: dict[str, Any], idx: int) -> Segment:
@@ -81,8 +118,12 @@ class WhisperXRunner:
 
     def load_model(self) -> float:
         t0 = time.perf_counter()
+        download_root = _resolve_model_download_root()
         self._model = self._whisperx.load_model(
-            self._model_name, self._device, compute_type=self._compute_type
+            self._model_name,
+            self._device,
+            compute_type=self._compute_type,
+            download_root=str(download_root),
         )
         return time.perf_counter() - t0
 
@@ -97,11 +138,37 @@ class WhisperXRunner:
         if not lang:
             raise TranscriptionError("Language could not be detected for alignment.")
         t0 = time.perf_counter()
-        self._align_model, self._align_metadata = self._whisperx.load_align_model(
-            language_code=lang,
-            device=self._device,
+        errors: list[str] = []
+
+        try:
+            self._align_model, self._align_metadata = self._whisperx.load_align_model(
+                language_code=lang,
+                device=self._device,
+            )
+            return time.perf_counter() - t0
+        except Exception as e:
+            errors.append(str(e))
+
+        for candidate in _align_model_candidates(lang):
+            try:
+                logger.warning(
+                    "Default align model failed for language=%s. Retrying with align model '%s'.",
+                    lang,
+                    candidate,
+                )
+                self._align_model, self._align_metadata = self._whisperx.load_align_model(
+                    language_code=lang,
+                    device=self._device,
+                    model_name=candidate,
+                )
+                logger.info("Using fallback align model '%s' for language=%s.", candidate, lang)
+                return time.perf_counter() - t0
+            except Exception as e:
+                errors.append(f"{candidate}: {e}")
+
+        raise TranscriptionError(
+            f"Failed to load alignment model for language '{lang}'. Tried default and fallbacks. Details: {' | '.join(errors)}"
         )
-        return time.perf_counter() - t0
 
     def transcribe_align(self, audio_path: Path) -> tuple[list[Segment], dict[str, float]]:
         if self._model is None:
@@ -171,7 +238,9 @@ def transcribe_and_align(
         timings.update(step_timings)
         detected_lang = runner.detected_language
     except Exception as e:
-        raise TranscriptionError(f"Transcription failed: {e}") from e
+        raise TranscriptionError(
+            f"Transcription failed: {_format_model_load_error(model_name, e)}"
+        ) from e
 
     full_text = " ".join(s.text.strip() for s in segments if s.text and s.text.strip()).strip()
 
@@ -215,7 +284,12 @@ def transcribe_and_align_chunked(
         language=language,
         batch_size=batch_size,
     )
-    timings["whisperx_load_model_seconds"] = runner.load_model()
+    try:
+        timings["whisperx_load_model_seconds"] = runner.load_model()
+    except Exception as e:
+        raise TranscriptionError(
+            f"Transcription failed: {_format_model_load_error(model_name, e)}"
+        ) from e
 
     results: list[ChunkResult] = []
     chunks_meta: list[dict[str, Any]] = []
