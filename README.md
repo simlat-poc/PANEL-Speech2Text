@@ -91,6 +91,21 @@ $env:HF_TOKEN = "hf_..."
 python -m app.main --input "file.mp4" --output "out.json" --enable-diarization
 ```
 
+## Voiceprint identification (optional)
+
+You can add identity matching on top of diarization:
+
+- Enroll known speakers from reference files (`--voiceprint-enroll NAME=PATH`)
+- Store voiceprints in a local DB (`--voiceprint-db-dir`, default: `.voiceprints`)
+- Match diarized speakers to enrolled voiceprints using cosine similarity
+- Keep generic labels when confidence is below threshold
+
+Example:
+
+```powershell
+python -m app.main --input "file.mp3" --output "out.json" --enable-diarization --enable-voiceprint --voiceprint-enroll "Alice=C:\refs\alice.wav" --voiceprint-enroll "Bob=C:\refs\bob.wav" --voiceprint-threshold 0.72
+```
+
 ## Export HTML Timeline (demo artifact)
 
 This exporter converts your pipeline JSON output into a single self-contained HTML file with:

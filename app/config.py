@@ -21,6 +21,12 @@ class RuntimeConfig:
     min_speakers: int | None
     max_speakers: int | None
     num_speakers: int | None  # forwarded as pyannote num_speakers when set (takes precedence over min/max)
+    enable_voiceprint: bool
+    voiceprint_db_dir: Path | None
+    voiceprint_enroll: tuple[str, ...]
+    voiceprint_threshold: float
+    voiceprint_min_segment_sec: float
+    voiceprint_embedding_model: str
     temp_dir: Path | None
     keep_temp_files: bool
     verbose: bool

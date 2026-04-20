@@ -159,6 +159,21 @@ def build_timeline_model(result: dict[str, Any], *, rtl_timeline: bool, rtl_text
     language = _detect_language(result)
     segments_raw = _get_segments(result)
 
+    # Optional voiceprint evidence (extras.voiceprint_evidence) to show per-speaker confidence in the lane label.
+    # We only display confidence when the speaker label is a resolved name (not SPEAKER_XX).
+    voiceprint_conf_by_name: dict[str, float] = {}
+    extras = result.get("extras")
+    if isinstance(extras, dict):
+        ev = extras.get("voiceprint_evidence")
+        if isinstance(ev, list):
+            for item in ev:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("candidate_name")
+                conf = item.get("confidence")
+                if isinstance(name, str) and name.strip() and isinstance(conf, (int, float)):
+                    voiceprint_conf_by_name[name.strip()] = float(conf)
+
     # Duration: prefer top-level; else max segment end.
     duration = result.get("duration_seconds")
     if not isinstance(duration, (int, float)):
@@ -196,7 +211,13 @@ def build_timeline_model(result: dict[str, Any], *, rtl_timeline: bool, rtl_text
         if speaker not in speaker_to_lane:
             lane_id = len(speaker_to_lane)
             speaker_to_lane[speaker] = lane_id
-            lanes.append({"lane_id": lane_id, "speaker": speaker})
+            lane: dict[str, Any] = {"lane_id": lane_id, "speaker": speaker}
+            conf = voiceprint_conf_by_name.get(speaker)
+            if isinstance(conf, (int, float)) and math.isfinite(float(conf)):
+                # only attach confidence for resolved names (not generic speaker labels)
+                if not str(speaker).upper().startswith("SPEAKER_"):
+                    lane["voiceprint_confidence"] = float(conf)
+            lanes.append(lane)
         lane_id = speaker_to_lane[speaker]
 
         full_text = seg.get("text")
@@ -1093,10 +1114,17 @@ def render_timeline_html(model: TimelineModel, *, rtl: bool = False) -> str:
         label.className = 'lane-label';
         label.textContent = lane.speaker || 'UNKNOWN';
 
-        const small = document.createElement('span');
-        small.className = 'small';
-        small.textContent = 'lane ' + (laneId + 1);
-        label.appendChild(small);
+        // Replace "lane 1/2/3" with voiceprint confidence when available.
+        // Only show confidence when speaker is a resolved name (not generic SPEAKER_XX).
+        const conf = lane.voiceprint_confidence;
+        const speaker = lane.speaker || '';
+        const isGeneric = String(speaker).toUpperCase().startsWith('SPEAKER_') || String(speaker).toUpperCase() === 'UNKNOWN';
+        if (!isGeneric && typeof conf === 'number' && isFinite(conf)) {{
+          const small = document.createElement('span');
+          small.className = 'small';
+          small.textContent = 'confidence ' + (conf * 100).toFixed(1) + '%';
+          label.appendChild(small);
+        }}
         laneRow.appendChild(label);
 
         // Blocks container for this lane (class used for RTL flex order).

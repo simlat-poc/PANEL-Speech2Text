@@ -25,6 +25,22 @@ Outputs/
 *.mkv
 !**/fixtures/**
 
+# Local model / diarization caches (large)
+.model_cache/
+
+# Local voiceprint DB (embeddings + index)
+.voiceprints/
+
+# Local recordings / reference audio (often personal)
+Users_records/
+
+# Bundled ffmpeg distribution (large binaries)
+ffmpeg-8.1-essentials_build/
+
+# Local input media you don't want to track
+Inputs/*.m4a
+Inputs/*.mp3
+
 # Secrets — never commit tokens
 .env
 .env.local

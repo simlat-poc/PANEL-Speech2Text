@@ -32,6 +32,13 @@ from .ffmpeg_utils import normalize_to_wav_mono_16k, validate_ffmpeg_exists
 from .serializers import write_json
 from .transcription import transcribe_and_align, transcribe_and_align_chunked
 from .utils import configure_logging, resolve_device, wav_duration_seconds
+from .voiceprint import (
+    SpeakerEmbedder,
+    enroll_voiceprints,
+    identify_speakers_from_turns,
+    parse_enrollment_specs,
+    relabel_segments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +90,37 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--chunk-length-sec", type=float, default=120.0, help="Chunk length in seconds (default: 120).")
     p.add_argument("--chunk-overlap-sec", type=float, default=5.0, help="Chunk overlap in seconds (default: 5).")
     p.add_argument("--enable-diarization", action="store_true", help="Enable speaker diarization.")
+    p.add_argument("--enable-voiceprint", action="store_true", help="Enable voiceprint identification on top of diarization.")
+    p.add_argument(
+        "--voiceprint-db-dir",
+        type=Path,
+        default=None,
+        help="Voiceprint DB directory (default: <project>/.voiceprints).",
+    )
+    p.add_argument(
+        "--voiceprint-enroll",
+        action="append",
+        default=[],
+        metavar="NAME=PATH",
+        help="Enroll known speaker from reference audio. Can be passed multiple times.",
+    )
+    p.add_argument(
+        "--voiceprint-threshold",
+        type=float,
+        default=0.72,
+        help="Cosine similarity threshold for assigning enrolled identity (default: 0.72).",
+    )
+    p.add_argument(
+        "--voiceprint-min-segment-sec",
+        type=float,
+        default=1.0,
+        help="Minimum diarized segment duration used for voiceprint evidence (default: 1.0s).",
+    )
+    p.add_argument(
+        "--voiceprint-embedding-model",
+        default="pyannote/embedding",
+        help="Embedding model id used for enrollment and matching (default: pyannote/embedding).",
+    )
     p.add_argument("--hf-token", default=None, help="Hugging Face token (or set HF_TOKEN env var).")
     p.add_argument(
         "--min-speakers",
@@ -173,6 +211,12 @@ def _validate_inputs(cfg: RuntimeConfig) -> None:
         raise ValueError("--html-px-per-sec must be > 0")
     if cfg.num_speakers is not None and cfg.num_speakers < 1:
         raise ValueError("--num-speakers must be >= 1 when set")
+    if cfg.enable_voiceprint and not cfg.enable_diarization:
+        raise ValueError("--enable-voiceprint requires --enable-diarization")
+    if not (0.0 <= cfg.voiceprint_threshold <= 1.0):
+        raise ValueError("--voiceprint-threshold must be in [0, 1]")
+    if cfg.voiceprint_min_segment_sec < 0:
+        raise ValueError("--voiceprint-min-segment-sec must be >= 0")
 
 
 def run_pipeline(cfg: RuntimeConfig) -> int:
@@ -264,6 +308,45 @@ def run_pipeline(cfg: RuntimeConfig) -> int:
             merged_extras["diarization_enabled"] = True
             merged_extras["diarization_method"] = "whisperx"
             merged_extras["speakers"] = [t.to_dict() for t in turns]
+
+            if cfg.enable_voiceprint:
+                db_dir = cfg.voiceprint_db_dir or (Path.cwd() / ".voiceprints")
+                embedder = SpeakerEmbedder(
+                    model_name=cfg.voiceprint_embedding_model,
+                    use_auth_token=token,
+                )
+                enroll_specs = parse_enrollment_specs(cfg.voiceprint_enroll)
+                if enroll_specs:
+                    t_enroll = time.perf_counter()
+                    enroll_stats = enroll_voiceprints(
+                        db_dir=db_dir,
+                        specs=enroll_specs,
+                        embedder=embedder,
+                        embedding_model=cfg.voiceprint_embedding_model,
+                    )
+                    pipeline_timings["voiceprint_enroll_seconds"] = time.perf_counter() - t_enroll
+                    merged_extras["voiceprint_enrollment"] = enroll_stats
+                t_ident = time.perf_counter()
+                mapping, evidence = identify_speakers_from_turns(
+                    db_dir=db_dir,
+                    normalized_audio_path=normalized_path,
+                    turns=turns,
+                    embedder=embedder,
+                    threshold=cfg.voiceprint_threshold,
+                    min_segment_sec=cfg.voiceprint_min_segment_sec,
+                )
+                if mapping:
+                    diarized_segments = relabel_segments(diarized_segments, mapping)
+                pipeline_timings["voiceprint_identify_seconds"] = time.perf_counter() - t_ident
+                merged_extras["voiceprint_enabled"] = True
+                merged_extras["voiceprint_db_dir"] = str(db_dir)
+                merged_extras["voiceprint_embedding_model"] = cfg.voiceprint_embedding_model
+                merged_extras["voiceprint_threshold"] = cfg.voiceprint_threshold
+                merged_extras["voiceprint_label_mapping"] = mapping
+                merged_extras["voiceprint_evidence"] = [ev.to_dict() for ev in evidence]
+            else:
+                merged_extras["voiceprint_enabled"] = False
+
             result = type(result)(
                 source_file=result.source_file,
                 normalized_audio_file=result.normalized_audio_file,
@@ -277,6 +360,7 @@ def run_pipeline(cfg: RuntimeConfig) -> int:
         else:
             merged_extras["diarization_enabled"] = False
             merged_extras["diarization_method"] = None
+            merged_extras["voiceprint_enabled"] = False
 
         result = type(result)(
             source_file=result.source_file,
@@ -395,6 +479,12 @@ def main(argv: list[str] | None = None) -> int:
         chunk_length_sec=float(args.chunk_length_sec),
         chunk_overlap_sec=float(args.chunk_overlap_sec),
         enable_diarization=bool(args.enable_diarization),
+        enable_voiceprint=bool(args.enable_voiceprint),
+        voiceprint_db_dir=args.voiceprint_db_dir.resolve() if args.voiceprint_db_dir else None,
+        voiceprint_enroll=tuple(args.voiceprint_enroll or []),
+        voiceprint_threshold=float(args.voiceprint_threshold),
+        voiceprint_min_segment_sec=float(args.voiceprint_min_segment_sec),
+        voiceprint_embedding_model=str(args.voiceprint_embedding_model),
         hf_token=args.hf_token,
         min_speakers=args.min_speakers,
         max_speakers=args.max_speakers,
